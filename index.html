@@ -17,51 +17,45 @@
             --secondary-text: #8e8e93; --border: #e5e5ea;
         }
         body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-        .container { width: 100%; max-width: 440px; padding: 20px; box-sizing: border-box; }
-        .card { background: var(--card-bg); border-radius: 28px; padding: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.06); display: flex; flex-direction: column; gap: 14px; }
-        h1 { font-size: 20px; font-weight: 700; text-align: center; margin: 0; }
+        .container { width: 100%; max-width: 440px; padding: 15px; box-sizing: border-box; }
+        .card { background: var(--card-bg); border-radius: 28px; padding: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.06); display: flex; flex-direction: column; gap: 14px; }
+        h1 { font-size: 18px; font-weight: 700; text-align: center; margin: 0; }
         
         .recorder-vitals { display: flex; flex-direction: column; align-items: center; padding: 10px 0; background: #f8f8fa; border-radius: 20px; }
-        #timer { font-size: 36px; font-weight: 200; font-variant-numeric: tabular-nums; }
+        #timer { font-size: 32px; font-weight: 200; font-variant-numeric: tabular-nums; }
         .recording-dot { width: 10px; height: 10px; background: var(--danger); border-radius: 50%; display: none; }
         .recording-dot.active { display: block; animation: pulse 1.2s infinite; }
         @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.5; } 100% { transform: scale(1); opacity: 1; } }
 
-        .device-selector { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
-        select { padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: #fff; font-size: 13px; outline: none; appearance: none; }
+        .progress-container { width: 100%; height: 6px; background: #eee; border-radius: 3px; display: none; overflow: hidden; margin-top: -5px; }
+        #progressBar { width: 0%; height: 100%; background: var(--success); transition: width 0.3s; }
+
+        .device-selector { display: flex; flex-direction: column; gap: 5px; }
+        select { padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: #fff; font-size: 13px; outline: none; }
         .refresh-link { font-size: 11px; color: var(--primary); text-align: right; cursor: pointer; text-decoration: underline; }
 
         .main-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        button { padding: 15px; border: none; border-radius: 16px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        button { padding: 14px; border: none; border-radius: 14px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
         button:active { transform: scale(0.96); }
         .btn-rec { background: var(--danger); color: white; grid-column: span 2; }
         .btn-pause { background: #ff9500; color: white; display: none; }
         .btn-file { background: #e5e5ea; color: var(--text); }
         .btn-trans { background: var(--primary); color: white; grid-column: span 2; }
-        .btn-clear { background: #f2f2f7; color: var(--danger); font-size: 12px; padding: 8px; border-radius: 10px; }
+        
+        .utility-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 5px; }
+        .btn-util { background: #f2f2f7; color: var(--primary); font-size: 11px; padding: 10px; border-radius: 10px; font-weight: 500; text-align: center; }
+        .btn-clear { color: var(--danger); grid-column: span 2; margin-top: 4px; border: 1px dashed #ff3b3033; }
 
-        #output { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 16px; min-height: 180px; max-height: 350px; overflow-y: auto; font-size: 16px; line-height: 1.5; outline: none; }
+        #output { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 16px; min-height: 180px; max-height: 300px; overflow-y: auto; font-size: 15px; line-height: 1.6; outline: none; white-space: pre-wrap; word-wrap: break-word; text-align: left; }
         #status { font-size: 11px; color: var(--secondary-text); text-align: center; }
         .export-group { display: none; gap: 10px; }
         .btn-exp { flex: 1; background: #3a3a3c; color: white; }
         .ts { color: var(--primary); font-family: monospace; font-weight: bold; margin-right: 5px; }
 
-        /* Настройки печати PDF */
         @media print {
-            body { background: white; }
-            .container { padding: 0; max-width: 100%; }
-            .card { box-shadow: none; padding: 0; border: none; }
-            h1, .recorder-vitals, .device-selector, .main-actions, #status, .btn-clear, .export-group, #saveBadge, .refresh-link { 
-                display: none !important; 
-            }
-            #output { 
-                border: none !important; 
-                overflow: visible !important; 
-                max-height: none !important; 
-                height: auto !important; 
-                padding: 0; margin: 0;
-            }
-            .ts { color: black !important; }
+            h1, .recorder-vitals, .device-selector, .main-actions, #status, .utility-grid, .export-group, #saveBadge, .refresh-link, .progress-container { display: none !important; }
+            #output { border: none !important; overflow: visible !important; max-height: none !important; height: auto !important; padding: 0; }
+            .ts { display: none !important; }
         }
     </style>
 </head>
@@ -78,9 +72,8 @@
         </div>
 
         <div class="device-selector">
-            <label style="font-size: 12px; color: var(--secondary-text); padding-left: 5px;">Источник звука:</label>
-            <select id="micSelect"><option value="">Разрешите доступ к микрофону</option></select>
-            <div class="refresh-link" id="refreshMics">Обновить список устройств</div>
+            <select id="micSelect"><option value="">Выбор микрофона...</option></select>
+            <div class="refresh-link" id="refreshMics">Обновить устройства</div>
         </div>
 
         <div class="main-actions">
@@ -91,15 +84,25 @@
             <button id="runBtn" class="btn-trans" disabled>✨ Транскрибировать</button>
         </div>
 
-        <div id="output" contenteditable="true" placeholder="Текст появится здесь..."></div>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span id="saveBadge" style="font-size: 10px; color: var(--success); opacity: 0;">✓ Сохранено</span>
-            <button id="clearBtn" class="btn-clear">🗑 Очистить всё</button>
+        <div class="progress-container" id="pCont"><div id="progressBar"></div></div>
+
+        <div id="output" contenteditable="true"></div>
+        
+        <div class="utility-wrapper">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span id="saveBadge" style="font-size: 10px; color: var(--success); opacity: 0; transition: 0.3s; font-weight: 600;">✓ Сохранено</span>
+            </div>
+            <div class="utility-grid">
+                <button id="noTsBtn" class="btn-util">Убрать время</button>
+                <button id="copyBtn" class="btn-util">Копировать</button>
+                <button id="shareBtn" class="btn-util">Поделиться</button>
+                <button id="clearBtn" class="btn-util btn-clear">🗑 Очистить всё</button>
+            </div>
         </div>
 
         <div class="export-group" id="expZone">
-            <button id="saveTxt" class="btn-exp">Сохранить TXT</button>
-            <button id="savePdf" class="btn-exp">Сохранить PDF</button>
+            <button id="saveTxt" class="btn-exp">TXT</button>
+            <button id="savePdf" class="btn-exp">PDF</button>
         </div>
     </div>
 </div>
@@ -118,52 +121,78 @@
     const status = document.getElementById('status');
     const output = document.getElementById('output');
     const timerDisplay = document.getElementById('timer');
-    const expZone = document.getElementById('expZone');
+    const pCont = document.getElementById('pCont');
+    const pBar = document.getElementById('progressBar');
+    const saveBadge = document.getElementById('saveBadge');
 
-    // Функция сохранения PDF
-    document.getElementById('savePdf').onclick = () => {
-        document.activeElement.blur(); 
-        setTimeout(() => { window.print(); }, 300);
-    };
+    document.getElementById('savePdf').onclick = () => { document.activeElement.blur(); setTimeout(() => { window.print(); }, 300); };
 
-    // Работа с микрофонами
     async function getMicrophones() {
         try {
             const devices = await navigator.mediaDevices.enumerateDevices();
             const audioDevices = devices.filter(d => d.kind === 'audioinput');
             micSelect.innerHTML = audioDevices.map(d => `<option value="${d.deviceId}">${d.label || 'Микрофон ' + (micSelect.length + 1)}</option>`).join('');
-        } catch (e) { status.innerText = "Ошибка устройств"; }
+        } catch (e) { status.innerText = "Ошибка аудиовхода"; }
     }
 
     window.onload = async () => {
         const savedText = localStorage.getItem('transcription_text');
-        if (savedText) { output.innerHTML = savedText; expZone.style.display = 'flex'; }
+        if (savedText) { output.innerHTML = savedText; document.getElementById('expZone').style.display = 'flex'; }
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             stream.getTracks().forEach(t => t.stop());
             await getMicrophones();
-        } catch (e) { micSelect.innerHTML = '<option>Доступ запрещен</option>'; }
+        } catch (e) { micSelect.innerHTML = '<option>Доступ ограничен</option>'; }
     };
 
     document.getElementById('refreshMics').onclick = getMicrophones;
 
-    // Автосохранение
-    output.oninput = () => {
+    const triggerSave = (msg = "✓ Сохранено") => {
         localStorage.setItem('transcription_text', output.innerHTML);
-        document.getElementById('saveBadge').style.opacity = 1;
-        setTimeout(() => document.getElementById('saveBadge').style.opacity = 0, 1000);
+        saveBadge.innerText = msg;
+        saveBadge.style.opacity = 1;
+        setTimeout(() => saveBadge.style.opacity = 0, 1500);
     };
 
-    document.getElementById('clearBtn').onclick = () => {
-        if (confirm("Очистить всё?")) { 
-            localStorage.removeItem('transcription_text'); 
-            output.innerHTML = ""; 
-            timerDisplay.innerText = "00:00:00"; 
-            expZone.style.display = 'none';
+    output.oninput = () => triggerSave();
+
+    // Удаление таймстампов
+    document.getElementById('noTsBtn').onclick = () => {
+        if (!output.innerText.trim()) return;
+        output.innerHTML = output.innerHTML.replace(/<span class="ts">\[\d+с\]<\/span>/g, '').trim();
+        triggerSave("Таймстампы удалены");
+    };
+
+    // Копирование в буфер
+    document.getElementById('copyBtn').onclick = async () => {
+        const text = output.innerText;
+        if (!text) return;
+        try {
+            await navigator.clipboard.writeText(text);
+            triggerSave("✓ Скопировано в буфер");
+        } catch (err) { alert("Ошибка копирования"); }
+    };
+
+    // Поделиться (Share API)
+    document.getElementById('shareBtn').onclick = async () => {
+        const text = output.innerText;
+        if (!text) return;
+        if (navigator.share) {
+            try {
+                await navigator.share({ title: 'Транскрипция', text: text });
+            } catch (err) { console.log("Отмена отправки"); }
+        } else {
+            alert("Ваш браузер не поддерживает отправку. Используйте Копирование.");
         }
     };
 
-    // Загрузка модели AI
+    document.getElementById('clearBtn').onclick = () => {
+        if (confirm("Очистить текущую сессию?")) { 
+            localStorage.removeItem('transcription_text'); output.innerHTML = ""; 
+            timerDisplay.innerText = "00:00:00"; document.getElementById('expZone').style.display = 'none';
+        }
+    };
+
     (async () => {
         try {
             transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-base');
@@ -174,18 +203,13 @@
     function updateTimer() {
         const now = Date.now();
         const diff = new Date(now - startTime + pausedTime);
-        const m = String(diff.getUTCMinutes()).padStart(2, '0');
-        const s = String(diff.getUTCSeconds()).padStart(2, '0');
-        timerDisplay.innerText = `00:${m}:${s}`;
+        timerDisplay.innerText = `00:${String(diff.getUTCMinutes()).padStart(2, '0')}:${String(diff.getUTCSeconds()).padStart(2, '0')}`;
     }
 
-    // Логика записи
     btnRec.onclick = async () => {
         if (!recorder || recorder.state === "inactive") {
-            const deviceId = micSelect.value;
-            const constraints = { audio: { deviceId: deviceId ? { exact: deviceId } : undefined } };
             try {
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: micSelect.value ? { exact: micSelect.value } : undefined } });
                 recorder = new MediaRecorder(stream);
                 chunks = [];
                 recorder.ondataavailable = e => chunks.push(e.data);
@@ -199,11 +223,11 @@
                 recorder.start();
                 startTime = Date.now(); pausedTime = 0;
                 timerInterval = setInterval(updateTimer, 1000);
-                btnRec.innerText = "■ Остановить"; btnPause.style.display = "block";
+                btnRec.innerText = "■ Стоп"; btnPause.style.display = "block";
                 document.getElementById('recordingIndicator').classList.add('active');
-            } catch(e) { alert("Ошибка микрофона: " + e.message); }
+            } catch(e) { alert("Микрофон недоступен"); }
         } else {
-            recorder.stop(); btnRec.innerText = "● Начать запись"; btnPause.style.display = "none";
+            recorder.stop(); btnRec.innerText = "● Запись"; btnPause.style.display = "none";
         }
     };
 
@@ -218,35 +242,39 @@
     };
 
     document.getElementById('fileBtn').onclick = () => document.getElementById('fInput').click();
-    document.getElementById('fInput').onchange = (e) => {
-        blob = e.target.files[0]; btnRun.disabled = false; status.innerText = "Файл выбран";
-    };
+    document.getElementById('fInput').onchange = (e) => { blob = e.target.files[0]; btnRun.disabled = false; status.innerText = "Файл готов"; };
 
-    // Запуск транскрибации
     btnRun.onclick = async () => {
-        status.innerText = "Анализ речи (ждем)..."; btnRun.disabled = true;
+        status.innerText = "Обработка..."; btnRun.disabled = true;
+        pCont.style.display = "block"; pBar.style.width = "0%";
         try {
             const ctx = new AudioContext({ sampleRate: 16000 });
             const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
             const res = await transcriber(decoded.getChannelData(0), { 
-                language: 'russian', 
-                return_timestamps: true, 
-                temperature: 0,
-                no_speech_threshold: 0.3,
-                repetition_penalty: 1.05,
-                condition_on_previous_text: true
+                language: 'russian', return_timestamps: true, temperature: 0,
+                no_speech_threshold: 0.4, compression_ratio_threshold: 2.4, condition_on_previous_text: true
             });
-            output.innerHTML = res.chunks.map(c => `<span class="ts">[${Math.floor(c.timestamp[0])}с]</span>${c.text}<br>`).join('');
-            localStorage.setItem('transcription_text', output.innerHTML);
-            status.innerText = "Готово"; expZone.style.display = 'flex';
-        } catch (e) { status.innerText = "Ошибка транскрибации"; }
-        btnRun.disabled = false;
+            let finalHtml = ""; let lastEndTime = 0;
+            res.chunks.forEach((chunk, i) => {
+                const start = chunk.timestamp[0];
+                if (i > 0 && (start - lastEndTime) > 1.5) finalHtml += "\n\n";
+                finalHtml += `<span class="ts">[${Math.floor(start)}с]</span>${chunk.text} `;
+                lastEndTime = chunk.timestamp[1];
+                pBar.style.width = ((i / res.chunks.length) * 100) + "%";
+            });
+            output.innerHTML = finalHtml.trim();
+            triggerSave("Транскрипция завершена");
+            status.innerText = "Готово";
+            document.getElementById('expZone').style.display = 'flex';
+        } catch (e) { status.innerText = "Ошибка"; }
+        btnRun.disabled = false; pBar.style.width = "100%";
+        setTimeout(() => { pCont.style.display = "none"; }, 1000);
     };
 
     document.getElementById('saveTxt').onclick = () => {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([output.innerText], {type: 'text/plain'}));
-        a.download = `voice_note.txt`; a.click();
+        a.download = `note.txt`; a.click();
     };
 
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
