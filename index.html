@@ -5,10 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Transcriber Pro</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/5988/5988584.png">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Transcribe">
     <style>
         :root {
             --bg: #f2f2f7; --card-bg: #ffffff; --primary: #007aff;
@@ -26,7 +22,6 @@
         .recording-dot.active { display: block; animation: pulse 1.2s infinite; }
         @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.5; } 100% { transform: scale(1); opacity: 1; } }
 
-        /* Выбор микрофона */
         .device-selector { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
         select { padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: #fff; font-size: 13px; outline: none; appearance: none; }
         .refresh-link { font-size: 11px; color: var(--primary); text-align: right; cursor: pointer; text-decoration: underline; }
@@ -46,7 +41,25 @@
         .btn-exp { flex: 1; background: #3a3a3c; color: white; }
         .ts { color: var(--primary); font-family: monospace; font-weight: bold; margin-right: 5px; }
 
-        @media print { .card > *:not(.output-wrapper), .device-selector { display: none; } .card { box-shadow: none; padding: 0; } #output { border: none; } }
+        /* ИСПРАВЛЕННЫЕ СТИЛИ ДЛЯ PDF (ПЕЧАТИ) */
+        @media print {
+            body { background: white; }
+            .container { padding: 0; max-width: 100%; }
+            .card { box-shadow: none; padding: 0; border: none; }
+            /* Скрываем всё, кроме текста */
+            h1, .recorder-vitals, .device-selector, .main-actions, #status, .btn-clear, .export-group, #saveBadge { 
+                display: none !important; 
+            }
+            #output { 
+                border: none !important; 
+                overflow: visible !important; 
+                max-height: none !important; 
+                height: auto !important; 
+                padding: 0;
+                margin: 0;
+            }
+            .ts { color: black !important; }
+        }
     </style>
 </head>
 <body>
@@ -83,7 +96,7 @@
 
         <div class="export-group" id="expZone">
             <button id="saveTxt" class="btn-exp">TXT</button>
-            <button onclick="window.print()" class="btn-exp">PDF</button>
+            <button id="savePdf" class="btn-exp">PDF</button>
         </div>
     </div>
 </div>
@@ -103,21 +116,28 @@
     const output = document.getElementById('output');
     const timerDisplay = document.getElementById('timer');
 
-    // Получение списка микрофонов
+    // Функция печати (PDF)
+    window.printDoc = () => {
+        document.activeElement.blur(); // убрать фокус/курсор
+        setTimeout(() => {
+            window.print();
+        }, 300);
+    };
+
+    document.getElementById('savePdf').onclick = window.printDoc;
+
+    // Остальной JS (микрофоны, запись, AI)
     async function getMicrophones() {
         try {
             const devices = await navigator.mediaDevices.enumerateDevices();
             const audioDevices = devices.filter(d => d.kind === 'audioinput');
             micSelect.innerHTML = audioDevices.map(d => `<option value="${d.deviceId}">${d.label || 'Микрофон ' + (micSelect.length + 1)}</option>`).join('');
-        } catch (e) { status.innerText = "Ошибка доступа к устройствам"; }
+        } catch (e) { status.innerText = "Ошибка устройств"; }
     }
 
-    // Инициализация при загрузке
     window.onload = async () => {
         const savedText = localStorage.getItem('transcription_text');
         if (savedText) { output.innerHTML = savedText; document.getElementById('expZone').style.display = 'flex'; }
-        
-        // Сначала запрашиваем доступ, чтобы получить метки (labels) устройств
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             stream.getTracks().forEach(t => t.stop());
@@ -127,7 +147,6 @@
 
     document.getElementById('refreshMics').onclick = getMicrophones;
 
-    // Автосохранение
     output.oninput = () => {
         localStorage.setItem('transcription_text', output.innerHTML);
         document.getElementById('saveBadge').style.opacity = 1;
@@ -157,7 +176,6 @@
         if (!recorder || recorder.state === "inactive") {
             const deviceId = micSelect.value;
             const constraints = { audio: { deviceId: deviceId ? { exact: deviceId } : undefined } };
-            
             try {
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 recorder = new MediaRecorder(stream);
@@ -173,7 +191,7 @@
                 recorder.start();
                 startTime = Date.now(); pausedTime = 0;
                 timerInterval = setInterval(updateTimer, 1000);
-                btnRec.innerText = "■ Остановить"; btnPause.style.display = "block";
+                btnRec.innerText = "■ Стоп"; btnPause.style.display = "block";
                 document.getElementById('recordingIndicator').classList.add('active');
             } catch(e) { alert("Ошибка микрофона: " + e.message); }
         } else {
@@ -203,21 +221,11 @@
             const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
             const res = await transcriber(decoded.getChannelData(0), { 
                 language: 'russian', 
-                task: 'transcribe', 
                 return_timestamps: true, 
-                chunk_length_s: 30, 
-                stride_length_s: 5,
                 temperature: 0,
-    
-                // Снижаем пороги, чтобы не "откусывать" важные части слов
-                no_speech_threshold: 0.3,  // Было 0.6, уменьшили вдвое
-                logprob_threshold: -1.0, 
-    
-                // Снижаем штраф за повторы до минимума (чтобы не искажать слова)
-                repetition_penalty: 1.05,  // Было 1.2, почти убрали влияние
-    
-                // Добавляем этот параметр для связности:
-                condition_on_previous_text: true 
+                no_speech_threshold: 0.3,
+                repetition_penalty: 1.05,
+                condition_on_previous_text: true
             });
             output.innerHTML = res.chunks.map(c => `<span class="ts">[${Math.floor(c.timestamp[0])}с]</span>${c.text}<br>`).join('');
             localStorage.setItem('transcription_text', output.innerHTML);
