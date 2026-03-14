@@ -17,14 +17,13 @@
         #status { font-size: 12px; color: var(--s); margin-top: 5px; }
         .progress { width: 100%; height: 6px; background: #eee; border-radius: 3px; display: none; overflow: hidden; }
         #pBar { width: 0%; height: 100%; background: var(--p); transition: 0.3s; }
-        button { padding: 14px; border: none; border-radius: 14px; font-size: 14px; font-weight: 600; cursor: pointer; }
+        button { padding: 14px; border: none; border-radius: 14px; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.2s; }
         .btn-rec { background: var(--d); color: #fff; }
         .btn-run { background: var(--p); color: #fff; }
         #output { background: #fff; border: 1px solid #e5e5ea; border-radius: 16px; padding: 15px; min-height: 200px; max-height: 300px; overflow-y: auto; font-size: 16px; line-height: 1.5; outline: none; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .btn-u { background: #f2f2f7; color: var(--p); font-size: 11px; }
         .ts { color: var(--p); font-weight: bold; margin-right: 5px; }
-        @media print { .card > *:not(#output) { display: none !important; } #output { border: none; max-height: none; } }
     </style>
 </head>
 <body>
@@ -33,7 +32,7 @@
         <h1>Smart Transcriber</h1>
         <div class="vitals">
             <div id="timer">00:00:00</div>
-            <div id="status">Загрузка...</div>
+            <div id="status">Загрузка AI...</div>
             <div class="progress" id="pCont"><div id="pBar"></div></div>
         </div>
         
@@ -61,15 +60,14 @@
 
     let recorder, chunks = [], blob = null, transcriber = null, startTime;
 
-    // 1. Инициализация (самая простая модель)
     (async () => {
         try {
+            // Используем Tiny как самую стабильную для браузера
             transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny');
             document.getElementById('status').innerText = "Готов";
         } catch (e) { document.getElementById('status').innerText = "Ошибка сети"; }
     })();
 
-    // 2. Запись
     document.getElementById('recBtn').onclick = async function() {
         if (!recorder || recorder.state === "inactive") {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -79,12 +77,11 @@
             recorder.onstop = () => {
                 blob = new Blob(chunks, { type: 'audio/wav' });
                 document.getElementById('runBtn').disabled = false;
-                document.getElementById('status').innerText = "Запись готова";
+                document.getElementById('status').innerText = "Аудио готово";
             };
             recorder.start();
             startTime = Date.now();
-            this.innerText = "■ Стоп";
-            this.style.background = "#000";
+            this.innerText = "■ Остановить";
             window.tInt = setInterval(() => {
                 const d = new Date(Date.now() - startTime);
                 document.getElementById('timer').innerText = `00:${String(d.getUTCMinutes()).padStart(2,'0')}:${String(d.getUTCSeconds()).padStart(2,'0')}`;
@@ -92,62 +89,69 @@
         } else {
             recorder.stop();
             this.innerText = "● Начать запись";
-            this.style.background = "";
             clearInterval(window.tInt);
         }
     };
 
-    // 3. Файл
     document.getElementById('fileBtn').onclick = () => document.getElementById('fInput').click();
     document.getElementById('fInput').onchange = (e) => { blob = e.target.files[0]; document.getElementById('runBtn').disabled = false; };
 
-    // 4. ТРАНСКРИБАЦИЯ (Минималистичный вызов)
     document.getElementById('runBtn').onclick = async () => {
         const status = document.getElementById('status');
         const pBar = document.getElementById('pBar');
-        status.innerText = "Работаю...";
+        const output = document.getElementById('output');
+        status.innerText = "Обработка...";
         document.getElementById('pCont').style.display = "block";
-        pBar.style.width = "20%";
+        pBar.style.width = "30%";
 
         try {
             const ac = new AudioContext({ sampleRate: 16000 });
-            const audioData = (await ac.decodeAudioData(await blob.arrayBuffer())).getChannelData(0);
+            const arrayBuffer = await blob.arrayBuffer();
+            const audioData = (await ac.decodeAudioData(arrayBuffer)).getChannelData(0);
             
-            pBar.style.width = "50%";
+            pBar.style.width = "60%";
 
             const result = await transcriber(audioData, { 
                 language: 'russian',
+                task: 'transcribe',
+                return_timestamps: true,
                 chunk_length_s: 30,
                 stride_length_s: 5,
-                return_timestamps: true
+                temperature: 0.0, // Убираем фантазии модели
             });
 
             pBar.style.width = "100%";
 
-            // Фильтр от "галлюцинаций" (если кусок текста состоит из повторов одного символа)
             let html = "";
             result.chunks.forEach(c => {
-                const text = c.text.trim();
-                if (text.length < 2 || /^(.)\1+$/.test(text.replace(/\s/g, ''))) return; 
+                let text = c.text.trim();
+                
+                // --- РЕШЕНИЕ ПРОБЛЕМЫ "ЧТЕНИЯ ДО КОНЦА" ---
+                // Если текст состоит из повторяющихся паттернов (типа 5,5,5), мы берем только ПЕРВЫЙ элемент
+                if (/(.{1,5})\1{3,}/.test(text.replace(/[\s,]/g, ''))) {
+                   text = text.split(/[\s,]+/)[0]; 
+                }
+                
+                if (text.length < 1) return;
+
                 html += `<span class="ts">[${Math.floor(c.timestamp[0])}с]</span>${text}<br><br>`;
             });
 
-            document.getElementById('output').innerHTML = html || "Тишина или шум";
-            status.innerText = "Готово";
-        } catch (e) { status.innerText = "Ошибка"; }
+            output.innerHTML = html || "Не удалось выделить речь из шума";
+            status.innerText = "Завершено";
+        } catch (e) { 
+            status.innerText = "Ошибка декодирования";
+            console.error(e);
+        }
         
-        setTimeout(() => { document.getElementById('pCont').style.display = "none"; pBar.style.width = "0"; }, 2000);
+        setTimeout(() => { document.getElementById('pCont').style.display = "none"; pBar.style.width = "0"; }, 1500);
     };
 
-    // 5. Кнопки утилит
-    document.getElementById('copyBtn').onclick = () => { navigator.clipboard.writeText(document.getElementById('output').innerText); };
+    document.getElementById('copyBtn').onclick = () => navigator.clipboard.writeText(document.getElementById('output').innerText);
     document.getElementById('shareBtn').onclick = () => { if (navigator.share) navigator.share({ text: document.getElementById('output').innerText }); };
-    document.getElementById('noTsBtn').onclick = () => { 
-        document.querySelectorAll('.ts').forEach(el => el.remove()); 
-        document.getElementById('output').innerHTML = document.getElementById('output').innerHTML.replace(/<br\s*\/?>/gi, '\n');
-    };
-    document.getElementById('pdfBtn').onclick = () => { window.print(); };
-    document.getElementById('clearBtn').onclick = () => { document.getElementById('output').innerHTML = ""; };
+    document.getElementById('noTsBtn').onclick = () => document.querySelectorAll('.ts').forEach(el => el.remove());
+    document.getElementById('pdfBtn').onclick = () => window.print();
+    document.getElementById('clearBtn').onclick = () => document.getElementById('output').innerHTML = "";
 </script>
 </body>
 </html>
