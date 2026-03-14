@@ -3,152 +3,215 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VoiceTranscribe Pro</title>
+    <title>Smart Transcriber Pro</title>
     <link rel="manifest" href="manifest.json">
     <style>
-        :root { --bg: #fdfdfd; --text: #333; --accent: #007aff; --danger: #eb4d4b; }
-        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .app-card { max-width: 500px; width: 100%; background: #fff; border: 1px solid #eee; border-radius: 20px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.03); }
-        .btn-group { display: flex; gap: 10px; margin-bottom: 15px; }
-        button { flex: 1; padding: 14px; border: none; border-radius: 12px; cursor: pointer; font-weight: 500; transition: all 0.2s; }
-        .btn-rec { background: var(--danger); color: white; }
-        .btn-file { background: #f0f0f5; color: var(--text); }
-        .btn-main { background: var(--accent); color: white; width: 100%; margin-top: 10px; }
-        button:disabled { opacity: 0.3; }
-        #status { font-size: 0.8rem; color: #999; text-align: center; margin: 15px 0; padding: 5px; border-radius: 5px; border: 1px solid transparent; }
-        .loading { border-color: #eee; background: #fcfcfc; }
-        #output { background: #fafafa; border-radius: 12px; padding: 15px; min-height: 120px; font-size: 0.95rem; border: 1px solid #f0f0f0; line-height: 1.6; }
-        .export-actions { display: none; gap: 10px; margin-top: 20px; }
-        .btn-exp { background: #333; color: white; }
-        .ts { color: var(--accent); font-family: monospace; font-weight: 600; margin-right: 8px; }
-        @media print { .btn-group, .btn-main, #status, .export-actions, h1 { display: none !important; } #output { border: none; } }
+        :root {
+            --bg: #f2f2f7; --card-bg: #ffffff; --primary: #007aff;
+            --danger: #ff3b30; --success: #34c759; --text: #1c1c1e;
+            --secondary-text: #8e8e93; --border: #e5e5ea;
+        }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        .container { width: 100%; max-width: 440px; padding: 20px; box-sizing: border-box; }
+        .card { background: var(--card-bg); border-radius: 28px; padding: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.06); display: flex; flex-direction: column; gap: 14px; }
+        h1 { font-size: 20px; font-weight: 700; text-align: center; margin: 0; }
+        
+        .recorder-vitals { display: flex; flex-direction: column; align-items: center; padding: 10px 0; background: #f8f8fa; border-radius: 20px; }
+        #timer { font-size: 36px; font-weight: 200; font-variant-numeric: tabular-nums; }
+        .recording-dot { width: 10px; height: 10px; background: var(--danger); border-radius: 50%; display: none; }
+        .recording-dot.active { display: block; animation: pulse 1.2s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.5; } 100% { transform: scale(1); opacity: 1; } }
+
+        /* Выбор микрофона */
+        .device-selector { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+        select { padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: #fff; font-size: 13px; outline: none; appearance: none; }
+        .refresh-link { font-size: 11px; color: var(--primary); text-align: right; cursor: pointer; text-decoration: underline; }
+
+        .main-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        button { padding: 15px; border: none; border-radius: 16px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        button:active { transform: scale(0.96); }
+        .btn-rec { background: var(--danger); color: white; grid-column: span 2; }
+        .btn-pause { background: #ff9500; color: white; display: none; }
+        .btn-file { background: #e5e5ea; color: var(--text); }
+        .btn-trans { background: var(--primary); color: white; grid-column: span 2; }
+        .btn-clear { background: #f2f2f7; color: var(--danger); font-size: 12px; padding: 8px; border-radius: 10px; }
+
+        #output { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 16px; min-height: 180px; max-height: 350px; overflow-y: auto; font-size: 16px; line-height: 1.5; outline: none; }
+        #status { font-size: 11px; color: var(--secondary-text); text-align: center; }
+        .export-group { display: none; gap: 10px; }
+        .btn-exp { flex: 1; background: #3a3a3c; color: white; }
+        .ts { color: var(--primary); font-family: monospace; font-weight: bold; margin-right: 5px; }
+
+        @media print { .card > *:not(.output-wrapper), .device-selector { display: none; } .card { box-shadow: none; padding: 0; } #output { border: none; } }
     </style>
 </head>
 <body>
 
-<div class="app-card">
-    <h1 style="text-align:center; font-size: 1.2rem; font-weight: 500;">Голосовой ассистент</h1>
+<div class="container">
+    <div class="card">
+        <h1>Smart Transcriber</h1>
+        
+        <div class="recorder-vitals">
+            <div id="timer">00:00:00</div>
+            <div id="recordingIndicator" class="recording-dot"></div>
+            <div id="status">Загрузка AI...</div>
+        </div>
 
-    <div class="btn-group">
-        <button id="recBtn" class="btn-rec">Запись</button>
-        <button id="fileBtn" class="btn-file">Файл</button>
-        <input type="file" id="fInput" accept="audio/*,video/*" style="display:none">
-    </div>
+        <div class="device-selector">
+            <label style="font-size: 12px; color: var(--secondary-text); padding-left: 5px;">Источник звука:</label>
+            <select id="micSelect"><option value="">Запрос разрешений...</option></select>
+            <div class="refresh-link" id="refreshMics">Обновить список устройств</div>
+        </div>
 
-    <button id="runBtn" class="btn-main" disabled>Транскрибировать</button>
-    <div id="status">Инициализация...</div>
-    <div id="output">Текст появится здесь...</div>
+        <div class="main-actions">
+            <button id="recBtn" class="btn-rec">● Начать запись</button>
+            <button id="pauseBtn" class="btn-pause">⏸ Пауза</button>
+            <button id="fileBtn" class="btn-file">📁 Файл</button>
+            <input type="file" id="fInput" accept="audio/*,video/*" style="display:none">
+            <button id="runBtn" class="btn-trans" disabled>✨ Транскрибировать</button>
+        </div>
 
-    <div class="export-actions" id="expZone">
-        <button id="saveTxtBtn" class="btn-exp">Сохранить TXT</button>
-        <button onclick="window.print()" class="btn-exp">Сохранить PDF</button>
+        <div id="output" contenteditable="true" placeholder="Текст появится здесь..."></div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span id="saveBadge" style="font-size: 10px; color: var(--success); opacity: 0;">✓ Сохранено</span>
+            <button id="clearBtn" class="btn-clear">🗑 Очистить всё</button>
+        </div>
+
+        <div class="export-group" id="expZone">
+            <button id="saveTxt" class="btn-exp">TXT</button>
+            <button onclick="window.print()" class="btn-exp">PDF</button>
+        </div>
     </div>
 </div>
 
 <script type="module">
     import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
-
-    // Конфигурация для работы в браузере
-    env.allowLocalModels = false;
-    env.useBrowserCache = true;
+    env.allowLocalModels = false; env.useBrowserCache = true;
 
     let recorder, chunks = [], blob = null, transcriber = null;
+    let startTime, timerInterval, pausedTime = 0;
 
+    const micSelect = document.getElementById('micSelect');
     const btnRec = document.getElementById('recBtn');
+    const btnPause = document.getElementById('pauseBtn');
     const btnRun = document.getElementById('runBtn');
     const status = document.getElementById('status');
     const output = document.getElementById('output');
-    const expZone = document.getElementById('expZone');
+    const timerDisplay = document.getElementById('timer');
 
-    async function initAI() {
+    // Получение списка микрофонов
+    async function getMicrophones() {
         try {
-            status.innerText = "Загрузка AI модели (около 75MB)...";
-            status.classList.add('loading');
-            
-            // Явное указание задачи и модели
-            transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-base'); 
-            // Примечание: .en — самая маленькая. Если нужен мультиязык (русский), используйте 'Xenova/whisper-tiny', для точности - 'Xenova/whisper-base'
-            
-            status.innerText = "Система готова";
-            status.classList.remove('loading');
-        } catch (e) {
-            console.error(e);
-            status.innerText = "Ошибка: " + e.message;
-        }
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const audioDevices = devices.filter(d => d.kind === 'audioinput');
+            micSelect.innerHTML = audioDevices.map(d => `<option value="${d.deviceId}">${d.label || 'Микрофон ' + (micSelect.length + 1)}</option>`).join('');
+        } catch (e) { status.innerText = "Ошибка доступа к устройствам"; }
     }
 
-    initAI();
+    // Инициализация при загрузке
+    window.onload = async () => {
+        const savedText = localStorage.getItem('transcription_text');
+        if (savedText) { output.innerHTML = savedText; document.getElementById('expZone').style.display = 'flex'; }
+        
+        // Сначала запрашиваем доступ, чтобы получить метки (labels) устройств
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(t => t.stop());
+            await getMicrophones();
+        } catch (e) { micSelect.innerHTML = '<option>Доступ запрещен</option>'; }
+    };
+
+    document.getElementById('refreshMics').onclick = getMicrophones;
+
+    // Автосохранение
+    output.oninput = () => {
+        localStorage.setItem('transcription_text', output.innerHTML);
+        document.getElementById('saveBadge').style.opacity = 1;
+        setTimeout(() => document.getElementById('saveBadge').style.opacity = 0, 1000);
+    };
+
+    document.getElementById('clearBtn').onclick = () => {
+        if (confirm("Очистить?")) { localStorage.removeItem('transcription_text'); output.innerHTML = ""; timerDisplay.innerText = "00:00:00"; }
+    };
+
+    (async () => {
+        try {
+            transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-base');
+            status.innerText = "Готов к работе";
+        } catch (e) { status.innerText = "Ошибка AI"; }
+    })();
+
+    function updateTimer() {
+        const now = Date.now();
+        const diff = new Date(now - startTime + pausedTime);
+        const m = String(diff.getUTCMinutes()).padStart(2, '0');
+        const s = String(diff.getUTCSeconds()).padStart(2, '0');
+        timerDisplay.innerText = `00:${m}:${s}`;
+    }
 
     btnRec.onclick = async () => {
-        if (recorder?.state === "recording") {
-            recorder.stop();
-            btnRec.innerText = "Запись";
-            btnRec.style.background = "";
-        } else {
+        if (!recorder || recorder.state === "inactive") {
+            const deviceId = micSelect.value;
+            const constraints = { audio: { deviceId: deviceId ? { exact: deviceId } : undefined } };
+            
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 recorder = new MediaRecorder(stream);
                 chunks = [];
                 recorder.ondataavailable = e => chunks.push(e.data);
                 recorder.onstop = () => {
                     blob = new Blob(chunks, { type: 'audio/wav' });
                     btnRun.disabled = false;
-                    status.innerText = "Аудиозапись готова";
+                    status.innerText = "Запись готова";
+                    document.getElementById('recordingIndicator').classList.remove('active');
+                    clearInterval(timerInterval);
                 };
                 recorder.start();
-                btnRec.innerText = "Стоп";
-                btnRec.style.background = "#333";
-            } catch(e) { alert("Нет доступа к микрофону"); }
+                startTime = Date.now(); pausedTime = 0;
+                timerInterval = setInterval(updateTimer, 1000);
+                btnRec.innerText = "■ Остановить"; btnPause.style.display = "block";
+                document.getElementById('recordingIndicator').classList.add('active');
+            } catch(e) { alert("Ошибка микрофона: " + e.message); }
+        } else {
+            recorder.stop(); btnRec.innerText = "● Запись"; btnPause.style.display = "none";
+        }
+    };
+
+    btnPause.onclick = () => {
+        if (recorder.state === "recording") {
+            recorder.pause(); clearInterval(timerInterval); pausedTime += Date.now() - startTime;
+            btnPause.innerText = "▶ Продолжить";
+        } else {
+            recorder.resume(); startTime = Date.now(); timerInterval = setInterval(updateTimer, 1000);
+            btnPause.innerText = "⏸ Пауза";
         }
     };
 
     document.getElementById('fileBtn').onclick = () => document.getElementById('fInput').click();
     document.getElementById('fInput').onchange = (e) => {
-        blob = e.target.files[0];
-        if(blob) { btnRun.disabled = false; status.innerText = "Файл выбран"; }
+        blob = e.target.files[0]; btnRun.disabled = false; status.innerText = "Файл готов";
     };
 
     btnRun.onclick = async () => {
-        status.innerText = "Обработка... Подождите";
-        btnRun.disabled = true;
+        status.innerText = "Транскрипция..."; btnRun.disabled = true;
         try {
             const ctx = new AudioContext({ sampleRate: 16000 });
             const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
-            const audioData = decoded.getChannelData(0);
-
-            const result = await transcriber(audioData, { 
-                language: 'russian',      // Принудительный русский язык
-                task: 'transcribe',       // Задача: транскрибация
-                return_timestamps: true,  // Возвращать временные метки
-                chunk_length_s: 30, 
-                stride_length_s: 5,
-                num_beams: 1,             // Стабильность лучевого поиска
-                temperature: 0            // Минимальная "фантазия" модели
-            });
-
-            output.innerHTML = result.chunks.map(c => 
-                `<div><span class="ts">[${Math.floor(c.timestamp[0])}с]</span> ${c.text}</div>`
-            ).join('');
-
-            status.innerText = "Готово";
-            expZone.style.display = 'flex';
-        } catch (err) {
-            status.innerText = "Ошибка транскрибации";
-            console.error(err);
-        } finally {
-            btnRun.disabled = false;
-        }
+            const res = await transcriber(decoded.getChannelData(0), { language: 'russian', return_timestamps: true, temperature: 0 });
+            output.innerHTML = res.chunks.map(c => `<span class="ts">[${Math.floor(c.timestamp[0])}с]</span>${c.text}<br>`).join('');
+            localStorage.setItem('transcription_text', output.innerHTML);
+            status.innerText = "Готово"; document.getElementById('expZone').style.display = 'flex';
+        } catch (e) { status.innerText = "Ошибка"; }
+        btnRun.disabled = false;
     };
 
-    document.getElementById('saveTxtBtn').onclick = () => {
+    document.getElementById('saveTxt').onclick = () => {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([output.innerText], {type: 'text/plain'}));
-        a.download = `text.txt`;
-        a.click();
+        a.download = `voice_note.txt`; a.click();
     };
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js');
-    }
+
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
 </script>
 </body>
 </html>
