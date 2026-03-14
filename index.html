@@ -201,20 +201,19 @@
                 language: 'russian', 
                 task: 'transcribe', 
                 return_timestamps: true, 
-    
-                // ПАРАМЕТРЫ ДЛЯ БОРЬБЫ С ГАЛЛЮЦИНАЦИЯМИ:
                 chunk_length_s: 30, 
                 stride_length_s: 5,
                 temperature: 0,
     
-                // 1. Игнорировать пустые фрагменты
-                no_speech_threshold: 0.6, 
+                // Снижаем пороги, чтобы не "откусывать" важные части слов
+                no_speech_threshold: 0.3,  // Было 0.6, уменьшили вдвое
+                logprob_threshold: -1.0, 
     
-                // 2. Порог уверенности (если модель не уверена, она промолчит, а не будет спамить буквами)
-                logprob_threshold: -1.0,
+                // Снижаем штраф за повторы до минимума (чтобы не искажать слова)
+                repetition_penalty: 1.05,  // Было 1.2, почти убрали влияние
     
-                // 3. Сжатие повторов
-                repetition_penalty: 1.2 
+                // Добавляем этот параметр для связности:
+                condition_on_previous_text: true 
             });
             output.innerHTML = res.chunks.map(c => `<span class="ts">[${Math.floor(c.timestamp[0])}с]</span>${c.text}<br>`).join('');
             localStorage.setItem('transcription_text', output.innerHTML);
