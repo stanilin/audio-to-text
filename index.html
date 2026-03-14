@@ -14,18 +14,15 @@
         h1 { font-size: 18px; font-weight: 700; text-align: center; margin: 0; }
         .recorder-vitals { display: flex; flex-direction: column; align-items: center; padding: 10px 0; background: #f8f8fa; border-radius: 20px; }
         #timer { font-size: 32px; font-weight: 200; font-variant-numeric: tabular-nums; }
-        .recording-dot { width: 10px; height: 10px; background: var(--danger); border-radius: 50%; display: none; }
-        .recording-dot.active { display: block; animation: pulse 1.2s infinite; }
-        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.5; } 100% { transform: scale(1); opacity: 1; } }
         .progress-container { width: 100%; height: 8px; background: #eee; border-radius: 4px; display: none; overflow: hidden; }
         #progressBar { width: 0%; height: 100%; background: var(--primary); transition: width 0.2s linear; }
         .main-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        button { padding: 14px; border: none; border-radius: 14px; font-size: 14px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        button { padding: 14px; border: none; border-radius: 14px; font-size: 14px; font-weight: 600; cursor: pointer; }
         .btn-rec { background: var(--danger); color: white; grid-column: span 2; }
         .btn-trans { background: var(--primary); color: white; grid-column: span 2; }
         .utility-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .btn-util { background: #f2f2f7; color: var(--primary); font-size: 11px; padding: 10px; border-radius: 10px; }
-        #output { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 16px; min-height: 180px; max-height: 300px; overflow-y: auto; font-size: 15px; line-height: 1.6; outline: none; white-space: pre-wrap; }
+        #output { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 16px; min-height: 180px; max-height: 300px; overflow-y: auto; font-size: 15px; line-height: 1.6; outline: none; white-space: pre-wrap; text-align: left; }
         .ts { color: var(--primary); font-family: monospace; font-weight: bold; margin-right: 5px; }
         #status { font-size: 11px; color: var(--secondary-text); text-align: center; }
     </style>
@@ -36,11 +33,9 @@
         <h1>Smart Transcriber</h1>
         <div class="recorder-vitals">
             <div id="timer">00:00:00</div>
-            <div id="recordingIndicator" class="recording-dot"></div>
-            <div id="status">Инициализация...</div>
+            <div id="status">Инициализация AI...</div>
         </div>
         <div class="main-actions">
-            <select id="micSelect" style="grid-column: span 2; padding: 10px; border-radius: 10px; border: 1px solid #ddd;"></select>
             <button id="recBtn" class="btn-rec">● Начать запись</button>
             <button id="fileBtn" style="background:#e5e5ea">📁 Файл</button>
             <input type="file" id="fInput" style="display:none">
@@ -62,7 +57,7 @@
     env.allowLocalModels = false;
 
     let recorder, chunks = [], blob = null, transcriber = null;
-    let startTime, timerInterval, pausedTime = 0;
+    let startTime, timerInterval;
 
     const btnRun = document.getElementById('runBtn');
     const status = document.getElementById('status');
@@ -70,15 +65,14 @@
     const pBar = document.getElementById('progressBar');
     const pCont = document.getElementById('pCont');
 
-    // Загрузка AI
+    // ЗАГРУЗКА БОЛЕЕ СТАБИЛЬНОЙ МОДЕЛИ TINY
     (async () => {
         try {
-            transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-base');
-            status.innerText = "Система готова";
+            transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny');
+            status.innerText = "Готов к работе (Tiny)";
         } catch (e) { status.innerText = "Ошибка загрузки"; }
     })();
 
-    // Логика записи (упрощенно для краткости)
     document.getElementById('recBtn').onclick = async () => {
         if (!recorder || recorder.state === "inactive") {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -96,42 +90,36 @@
                 const d = new Date(Date.now() - startTime);
                 document.getElementById('timer').innerText = `00:${String(d.getUTCMinutes()).padStart(2,'0')}:${String(d.getUTCSeconds()).padStart(2,'0')}`;
             }, 1000);
-            document.getElementById('recordingIndicator').classList.add('active');
+            document.getElementById('recBtn').innerText = "■ Остановить";
         } else {
             recorder.stop();
             clearInterval(timerInterval);
-            document.getElementById('recordingIndicator').classList.remove('active');
+            document.getElementById('recBtn').innerText = "● Начать запись";
         }
     };
 
     btnRun.onclick = async () => {
-        status.innerText = "Обработка нейросетью...";
+        status.innerText = "Транскрипция...";
         btnRun.disabled = true;
         pCont.style.display = "block";
-        pBar.style.width = "10%";
+        pBar.style.width = "5%";
 
         try {
             const ctx = new AudioContext({ sampleRate: 16000 });
             const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
-            const audioData = decoded.getChannelData(0);
-
-            // Имитация прогресса для UX
-            let progress = 10;
+            
+            let progress = 5;
             const progInt = setInterval(() => {
-                if (progress < 90) { progress += 2; pBar.style.width = progress + "%"; }
-            }, 500);
+                if (progress < 95) { progress += 1; pBar.style.width = progress + "%"; }
+            }, 400);
 
-            const res = await transcriber(audioData, { 
+            const res = await transcriber(decoded.getChannelData(0), { 
                 language: 'russian',
                 return_timestamps: true,
                 temperature: 0,
-                // ЖЕСТКИЕ ПАРАМЕТРЫ ПРОТИВ ЦИКЛОВ
-                no_speech_threshold: 0.3,
-                compression_ratio_threshold: 2.2,
-                logprob_threshold: -1.0,
-                max_new_tokens: 128, // Ограничение на длину одного сегмента
-                chunk_length_s: 30,
-                stride_length_s: 5
+                no_speech_threshold: 0.5, // Более жестко к шуму
+                compression_ratio_threshold: 2.0,
+                logprob_threshold: -1.0
             });
 
             clearInterval(progInt);
@@ -139,19 +127,22 @@
 
             let html = ""; let lastEnd = 0;
             res.chunks.forEach((c, i) => {
+                // ПРОГРАММНЫЙ ФИЛЬТР ПОВТОРОВ (Убирает Д-д-д на лету)
+                let cleanText = c.text.replace(/(.)\1{4,}/g, ''); 
+                if (cleanText.trim().length < 2) return; // Игнорируем мусорные куски
+
                 if (i > 0 && (c.timestamp[0] - lastEnd) > 1.5) html += "\n\n";
-                html += `<span class="ts">[${Math.floor(c.timestamp[0])}с]</span>${c.text} `;
+                html += `<span class="ts">[${Math.floor(c.timestamp[0])}с]</span>${cleanText} `;
                 lastEnd = c.timestamp[1];
             });
 
-            output.innerHTML = html.trim();
-            status.innerText = "Готово";
+            output.innerHTML = html.trim() || "Речь не распознана. Попробуйте записать громче.";
+            status.innerText = "Завершено";
         } catch (e) { status.innerText = "Ошибка"; console.error(e); }
         btnRun.disabled = false;
-        setTimeout(() => pCont.style.display = "none", 2000);
+        setTimeout(() => pCont.style.display = "none", 1500);
     };
 
-    // Утилиты
     document.getElementById('copyBtn').onclick = () => {
         navigator.clipboard.writeText(output.innerText);
         status.innerText = "Скопировано!";
@@ -160,6 +151,9 @@
         output.innerHTML = output.innerHTML.replace(/<span class="ts">\[\d+с\]<\/span>/g, '').trim();
     };
     document.getElementById('clearBtn').onclick = () => { output.innerHTML = ""; };
+    document.getElementById('shareBtn').onclick = () => {
+        if (navigator.share) navigator.share({ text: output.innerText });
+    };
 </script>
 </body>
 </html>
