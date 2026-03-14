@@ -66,7 +66,7 @@
             status.classList.add('loading');
             
             // Явное указание задачи и модели
-            transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en'); 
+            transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny'); 
             // Примечание: .en — самая маленькая. Если нужен мультиязык (русский), используйте 'Xenova/whisper-tiny'
             
             status.innerText = "Система готова";
