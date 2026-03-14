@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VoiceTranscribe Pro</title>
+    <link rel="manifest" href="manifest.json">
     <style>
         :root { --bg: #fdfdfd; --text: #333; --accent: #007aff; --danger: #eb4d4b; }
         body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
@@ -14,8 +15,8 @@
         .btn-file { background: #f0f0f5; color: var(--text); }
         .btn-main { background: var(--accent); color: white; width: 100%; margin-top: 10px; }
         button:disabled { opacity: 0.3; }
-        #status { font-size: 0.8rem; color: #999; text-align: center; margin: 15px 0; padding: 5px; border-radius: 5px; }
-        .err { background: #fff1f0; color: #cf1322 !important; }
+        #status { font-size: 0.8rem; color: #999; text-align: center; margin: 15px 0; padding: 5px; border-radius: 5px; border: 1px solid transparent; }
+        .loading { border-color: #eee; background: #fcfcfc; }
         #output { background: #fafafa; border-radius: 12px; padding: 15px; min-height: 120px; font-size: 0.95rem; border: 1px solid #f0f0f0; line-height: 1.6; }
         .export-actions { display: none; gap: 10px; margin-top: 20px; }
         .btn-exp { background: #333; color: white; }
@@ -35,7 +36,7 @@
     </div>
 
     <button id="runBtn" class="btn-main" disabled>Транскрибировать</button>
-    <div id="status">Инициализация модулей...</div>
+    <div id="status">Инициализация...</div>
     <div id="output">Текст появится здесь...</div>
 
     <div class="export-actions" id="expZone">
@@ -45,8 +46,11 @@
 </div>
 
 <script type="module">
-    // Загружаем библиотеку напрямую как модуль
-    import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+    import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+
+    // Конфигурация для работы в браузере
+    env.allowLocalModels = false;
+    env.useBrowserCache = true;
 
     let recorder, chunks = [], blob = null, transcriber = null;
 
@@ -56,21 +60,24 @@
     const output = document.getElementById('output');
     const expZone = document.getElementById('expZone');
 
-    // Загрузка модели
-    async function init() {
+    async function initAI() {
         try {
-            status.innerText = "Загрузка AI (может занять время)...";
-            transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny');
+            status.innerText = "Загрузка AI модели (около 75MB)...";
+            status.classList.add('loading');
+            
+            // Явное указание задачи и модели
+            transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en'); 
+            // Примечание: .en — самая маленькая. Если нужен мультиязык (русский), используйте 'Xenova/whisper-tiny'
+            
             status.innerText = "Система готова";
-            status.classList.remove('err');
+            status.classList.remove('loading');
         } catch (e) {
             console.error(e);
-            status.innerText = "Ошибка: " + e.message.substring(0, 50);
-            status.classList.add('err');
+            status.innerText = "Ошибка: " + e.message;
         }
     }
 
-    init();
+    initAI();
 
     btnRec.onclick = async () => {
         if (recorder?.state === "recording") {
@@ -91,37 +98,35 @@
                 recorder.start();
                 btnRec.innerText = "Стоп";
                 btnRec.style.background = "#333";
-            } catch(e) { alert("Микрофон недоступен. Проверьте разрешения HTTPS."); }
+            } catch(e) { alert("Нет доступа к микрофону"); }
         }
     };
 
     document.getElementById('fileBtn').onclick = () => document.getElementById('fInput').click();
     document.getElementById('fInput').onchange = (e) => {
         blob = e.target.files[0];
-        if(blob) { btnRun.disabled = false; status.innerText = "Файл выбран: " + blob.name; }
+        if(blob) { btnRun.disabled = false; status.innerText = "Файл выбран"; }
     };
 
     btnRun.onclick = async () => {
-        if (!transcriber) return;
-        status.innerText = "Распознавание речи... Пожалуйста, ждите.";
+        status.innerText = "Обработка... Подождите";
         btnRun.disabled = true;
-        
         try {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-            const arrayBuffer = await blob.arrayBuffer();
-            const decoded = await ctx.decodeAudioData(arrayBuffer);
-            
-            const res = await transcriber(decoded.getChannelData(0), { 
-                chunk_length_s: 30, 
-                stride_length_s: 5, 
-                return_timestamps: true 
+            const ctx = new AudioContext({ sampleRate: 16000 });
+            const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+            const audioData = decoded.getChannelData(0);
+
+            const result = await transcriber(audioData, { 
+                return_timestamps: true,
+                chunk_length_s: 30,
+                stride_length_s: 5
             });
 
-            output.innerHTML = res.chunks.map(c => 
+            output.innerHTML = result.chunks.map(c => 
                 `<div><span class="ts">[${Math.floor(c.timestamp[0])}с]</span> ${c.text}</div>`
             ).join('');
 
-            status.innerText = "Завершено успешно";
+            status.innerText = "Готово";
             expZone.style.display = 'flex';
         } catch (err) {
             status.innerText = "Ошибка транскрибации";
@@ -134,10 +139,9 @@
     document.getElementById('saveTxtBtn').onclick = () => {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([output.innerText], {type: 'text/plain'}));
-        a.download = `transcription.txt`;
+        a.download = `text.txt`;
         a.click();
     };
 </script>
-
 </body>
 </html>
