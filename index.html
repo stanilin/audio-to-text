@@ -63,7 +63,7 @@
     (async () => {
         try {
             // Используем Small как самую умную для браузера
-            transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-small');
+            transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-base');
             document.getElementById('status').innerText = "Готов";
         } catch (e) { document.getElementById('status').innerText = "Ошибка сети"; }
     })();
