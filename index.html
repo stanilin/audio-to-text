@@ -24,6 +24,23 @@
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .btn-u { background: #f2f2f7; color: var(--p); font-size: 11px; }
         .ts { color: var(--p); font-weight: bold; margin-right: 5px; }
+
+        /* Стиль заголовка для PDF */
+        #pdfHeader { display: none; font-weight: bold; font-size: 18pt; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+
+        @media print {
+            body { background: white !important; }
+            .container { padding: 0 !important; max-width: 100% !important; width: 100% !important; }
+            .card { box-shadow: none !important; padding: 0 !important; border: none !important; width: 100% !important; }
+            h1, .vitals, button, .grid, .progress, #status { display: none !important; }
+            #pdfHeader { display: block !important; }
+            #output { 
+                display: block !important; border: none !important; overflow: visible !important; 
+                max-height: none !important; height: auto !important; width: 100% !important;
+                padding: 0 !important; margin: 0 !important; font-size: 12pt !important;
+            }
+            .ts { color: black !important; }
+        }
     </style>
 </head>
 <body>
@@ -43,7 +60,10 @@
             <button id="runBtn" class="btn-run" disabled>✨ Пуск</button>
         </div>
 
-        <div id="output" contenteditable="true"></div>
+        <div id="output" contenteditable="true">
+            <div id="pdfHeader"></div>
+            <div id="textContent"></div>
+        </div>
 
         <div class="grid">
             <button id="copyBtn" class="btn-u">Копировать</button>
@@ -62,7 +82,6 @@
 
     (async () => {
         try {
-            // Используем Small как самую умную для браузера
             transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-base');
             document.getElementById('status').innerText = "Готов";
         } catch (e) { document.getElementById('status').innerText = "Ошибка сети"; }
@@ -81,7 +100,7 @@
             };
             recorder.start();
             startTime = Date.now();
-            this.innerText = "■ Остановить";
+            this.innerText = "■ Стоп";
             window.tInt = setInterval(() => {
                 const d = new Date(Date.now() - startTime);
                 document.getElementById('timer').innerText = `00:${String(d.getUTCMinutes()).padStart(2,'0')}:${String(d.getUTCSeconds()).padStart(2,'0')}`;
@@ -99,59 +118,56 @@
     document.getElementById('runBtn').onclick = async () => {
         const status = document.getElementById('status');
         const pBar = document.getElementById('pBar');
-        const output = document.getElementById('output');
+        const textContent = document.getElementById('textContent');
         status.innerText = "Обработка...";
         document.getElementById('pCont').style.display = "block";
         pBar.style.width = "30%";
 
         try {
             const ac = new AudioContext({ sampleRate: 16000 });
-            const arrayBuffer = await blob.arrayBuffer();
-            const audioData = (await ac.decodeAudioData(arrayBuffer)).getChannelData(0);
-            
+            const audioData = (await ac.decodeAudioData(await blob.arrayBuffer())).getChannelData(0);
             pBar.style.width = "60%";
 
             const result = await transcriber(audioData, { 
-                language: 'russian',
-                task: 'transcribe',
-                return_timestamps: true,
-                chunk_length_s: 30,
-                stride_length_s: 5,
-                temperature: 0.0, // Убираем фантазии модели
+                language: 'russian', task: 'transcribe', return_timestamps: true,
+                chunk_length_s: 30, stride_length_s: 5, temperature: 0.0,
             });
 
             pBar.style.width = "100%";
-
-            let html = "";
+            let html = ""; let lastEnd = 0;
             result.chunks.forEach(c => {
                 let text = c.text.trim();
-                
-                // --- РЕШЕНИЕ ПРОБЛЕМЫ "ЧТЕНИЯ ДО КОНЦА" ---
-                // Если текст состоит из повторяющихся паттернов (типа 5,5,5), мы берем только ПЕРВЫЙ элемент
-                if (/(.{1,5})\1{3,}/.test(text.replace(/[\s,]/g, ''))) {
-                   text = text.split(/[\s,]+/)[0]; 
-                }
-                
-                if (text.length < 1) return;
-
-                html += `<span class="ts">[${Math.floor(c.timestamp[0])}с]</span>${text}<br><br>`;
+                if (text.length < 1 || /^(.)\1{3,}/.test(text.replace(/[\s,]/g, ''))) return;
+                if (html !== "" && (c.timestamp[0] - lastEnd) > 1.5) html += "<br><br>";
+                html += `<span class="ts">[${Math.floor(c.timestamp[0])}с]</span>${text} `;
+                lastEnd = c.timestamp[1];
             });
 
-            output.innerHTML = html || "Не удалось выделить речь из шума";
+            textContent.innerHTML = html || "Речь не распознана";
             status.innerText = "Завершено";
-        } catch (e) { 
-            status.innerText = "Ошибка декодирования";
-            console.error(e);
-        }
-        
+        } catch (e) { status.innerText = "Ошибка"; }
         setTimeout(() => { document.getElementById('pCont').style.display = "none"; pBar.style.width = "0"; }, 1500);
     };
 
-    document.getElementById('copyBtn').onclick = () => navigator.clipboard.writeText(document.getElementById('output').innerText);
-    document.getElementById('shareBtn').onclick = () => { if (navigator.share) navigator.share({ text: document.getElementById('output').innerText }); };
+    document.getElementById('copyBtn').onclick = () => navigator.clipboard.writeText(document.getElementById('textContent').innerText);
+    document.getElementById('shareBtn').onclick = () => { if (navigator.share) navigator.share({ text: document.getElementById('textContent').innerText }); };
     document.getElementById('noTsBtn').onclick = () => document.querySelectorAll('.ts').forEach(el => el.remove());
-    document.getElementById('pdfBtn').onclick = () => window.print();
-    document.getElementById('clearBtn').onclick = () => document.getElementById('output').innerHTML = "";
+    
+    document.getElementById('pdfBtn').onclick = () => {
+        const header = document.getElementById('pdfHeader');
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('ru-RU');
+        const timeStr = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        
+        header.innerText = `Запись от ${dateStr}, ${timeStr}`;
+        window.print();
+    };
+    
+    document.getElementById('clearBtn').onclick = () => { 
+        document.getElementById('textContent').innerHTML = ""; 
+        document.getElementById('timer').innerText = "00:00:00"; 
+        document.getElementById('status').innerText = "Готов";
+    };
 </script>
 </body>
 </html>
