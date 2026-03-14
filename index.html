@@ -197,7 +197,25 @@
         try {
             const ctx = new AudioContext({ sampleRate: 16000 });
             const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
-            const res = await transcriber(decoded.getChannelData(0), { language: 'russian', return_timestamps: true, temperature: 0 });
+            const res = await transcriber(decoded.getChannelData(0), { 
+                language: 'russian', 
+                task: 'transcribe', 
+                return_timestamps: true, 
+    
+                // ПАРАМЕТРЫ ДЛЯ БОРЬБЫ С ГАЛЛЮЦИНАЦИЯМИ:
+                chunk_length_s: 30, 
+                stride_length_s: 5,
+                temperature: 0,
+    
+                // 1. Игнорировать пустые фрагменты
+                no_speech_threshold: 0.6, 
+    
+                // 2. Порог уверенности (если модель не уверена, она промолчит, а не будет спамить буквами)
+                logprob_threshold: -1.0,
+    
+                // 3. Сжатие повторов
+                repetition_penalty: 1.2 
+            });
             output.innerHTML = res.chunks.map(c => `<span class="ts">[${Math.floor(c.timestamp[0])}с]</span>${c.text}<br>`).join('');
             localStorage.setItem('transcription_text', output.innerHTML);
             status.innerText = "Готово"; document.getElementById('expZone').style.display = 'flex';
