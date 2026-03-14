@@ -117,9 +117,13 @@
             const audioData = decoded.getChannelData(0);
 
             const result = await transcriber(audioData, { 
-                return_timestamps: true,
-                chunk_length_s: 30,
-                stride_length_s: 5
+                language: 'russian',      // Принудительный русский язык
+                task: 'transcribe',       // Задача: транскрибация
+                return_timestamps: true,  // Возвращать временные метки
+                chunk_length_s: 30, 
+                stride_length_s: 5,
+                num_beams: 1,             // Стабильность лучевого поиска
+                temperature: 0            // Минимальная "фантазия" модели
             });
 
             output.innerHTML = result.chunks.map(c => 
@@ -142,6 +146,9 @@
         a.download = `text.txt`;
         a.click();
     };
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js');
+    }
 </script>
 </body>
 </html>
