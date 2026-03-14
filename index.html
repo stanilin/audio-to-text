@@ -4,7 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Transcriber Pro</title>
+    
     <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
     <style>
         :root {
             --bg: #f2f2f7; --card-bg: #ffffff; --primary: #007aff;
@@ -41,13 +46,12 @@
         .btn-exp { flex: 1; background: #3a3a3c; color: white; }
         .ts { color: var(--primary); font-family: monospace; font-weight: bold; margin-right: 5px; }
 
-        /* ИСПРАВЛЕННЫЕ СТИЛИ ДЛЯ PDF (ПЕЧАТИ) */
+        /* Настройки печати PDF */
         @media print {
             body { background: white; }
             .container { padding: 0; max-width: 100%; }
             .card { box-shadow: none; padding: 0; border: none; }
-            /* Скрываем всё, кроме текста */
-            h1, .recorder-vitals, .device-selector, .main-actions, #status, .btn-clear, .export-group, #saveBadge { 
+            h1, .recorder-vitals, .device-selector, .main-actions, #status, .btn-clear, .export-group, #saveBadge, .refresh-link { 
                 display: none !important; 
             }
             #output { 
@@ -55,8 +59,7 @@
                 overflow: visible !important; 
                 max-height: none !important; 
                 height: auto !important; 
-                padding: 0;
-                margin: 0;
+                padding: 0; margin: 0;
             }
             .ts { color: black !important; }
         }
@@ -76,7 +79,7 @@
 
         <div class="device-selector">
             <label style="font-size: 12px; color: var(--secondary-text); padding-left: 5px;">Источник звука:</label>
-            <select id="micSelect"><option value="">Запрос разрешений...</option></select>
+            <select id="micSelect"><option value="">Разрешите доступ к микрофону</option></select>
             <div class="refresh-link" id="refreshMics">Обновить список устройств</div>
         </div>
 
@@ -95,8 +98,8 @@
         </div>
 
         <div class="export-group" id="expZone">
-            <button id="saveTxt" class="btn-exp">TXT</button>
-            <button id="savePdf" class="btn-exp">PDF</button>
+            <button id="saveTxt" class="btn-exp">Сохранить TXT</button>
+            <button id="savePdf" class="btn-exp">Сохранить PDF</button>
         </div>
     </div>
 </div>
@@ -115,18 +118,15 @@
     const status = document.getElementById('status');
     const output = document.getElementById('output');
     const timerDisplay = document.getElementById('timer');
+    const expZone = document.getElementById('expZone');
 
-    // Функция печати (PDF)
-    window.printDoc = () => {
-        document.activeElement.blur(); // убрать фокус/курсор
-        setTimeout(() => {
-            window.print();
-        }, 300);
+    // Функция сохранения PDF
+    document.getElementById('savePdf').onclick = () => {
+        document.activeElement.blur(); 
+        setTimeout(() => { window.print(); }, 300);
     };
 
-    document.getElementById('savePdf').onclick = window.printDoc;
-
-    // Остальной JS (микрофоны, запись, AI)
+    // Работа с микрофонами
     async function getMicrophones() {
         try {
             const devices = await navigator.mediaDevices.enumerateDevices();
@@ -137,7 +137,7 @@
 
     window.onload = async () => {
         const savedText = localStorage.getItem('transcription_text');
-        if (savedText) { output.innerHTML = savedText; document.getElementById('expZone').style.display = 'flex'; }
+        if (savedText) { output.innerHTML = savedText; expZone.style.display = 'flex'; }
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             stream.getTracks().forEach(t => t.stop());
@@ -147,6 +147,7 @@
 
     document.getElementById('refreshMics').onclick = getMicrophones;
 
+    // Автосохранение
     output.oninput = () => {
         localStorage.setItem('transcription_text', output.innerHTML);
         document.getElementById('saveBadge').style.opacity = 1;
@@ -154,9 +155,15 @@
     };
 
     document.getElementById('clearBtn').onclick = () => {
-        if (confirm("Очистить?")) { localStorage.removeItem('transcription_text'); output.innerHTML = ""; timerDisplay.innerText = "00:00:00"; }
+        if (confirm("Очистить всё?")) { 
+            localStorage.removeItem('transcription_text'); 
+            output.innerHTML = ""; 
+            timerDisplay.innerText = "00:00:00"; 
+            expZone.style.display = 'none';
+        }
     };
 
+    // Загрузка модели AI
     (async () => {
         try {
             transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-base');
@@ -172,6 +179,7 @@
         timerDisplay.innerText = `00:${m}:${s}`;
     }
 
+    // Логика записи
     btnRec.onclick = async () => {
         if (!recorder || recorder.state === "inactive") {
             const deviceId = micSelect.value;
@@ -191,11 +199,11 @@
                 recorder.start();
                 startTime = Date.now(); pausedTime = 0;
                 timerInterval = setInterval(updateTimer, 1000);
-                btnRec.innerText = "■ Стоп"; btnPause.style.display = "block";
+                btnRec.innerText = "■ Остановить"; btnPause.style.display = "block";
                 document.getElementById('recordingIndicator').classList.add('active');
             } catch(e) { alert("Ошибка микрофона: " + e.message); }
         } else {
-            recorder.stop(); btnRec.innerText = "● Запись"; btnPause.style.display = "none";
+            recorder.stop(); btnRec.innerText = "● Начать запись"; btnPause.style.display = "none";
         }
     };
 
@@ -211,11 +219,12 @@
 
     document.getElementById('fileBtn').onclick = () => document.getElementById('fInput').click();
     document.getElementById('fInput').onchange = (e) => {
-        blob = e.target.files[0]; btnRun.disabled = false; status.innerText = "Файл готов";
+        blob = e.target.files[0]; btnRun.disabled = false; status.innerText = "Файл выбран";
     };
 
+    // Запуск транскрибации
     btnRun.onclick = async () => {
-        status.innerText = "Транскрипция..."; btnRun.disabled = true;
+        status.innerText = "Анализ речи (ждем)..."; btnRun.disabled = true;
         try {
             const ctx = new AudioContext({ sampleRate: 16000 });
             const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
@@ -229,8 +238,8 @@
             });
             output.innerHTML = res.chunks.map(c => `<span class="ts">[${Math.floor(c.timestamp[0])}с]</span>${c.text}<br>`).join('');
             localStorage.setItem('transcription_text', output.innerHTML);
-            status.innerText = "Готово"; document.getElementById('expZone').style.display = 'flex';
-        } catch (e) { status.innerText = "Ошибка"; }
+            status.innerText = "Готово"; expZone.style.display = 'flex';
+        } catch (e) { status.innerText = "Ошибка транскрибации"; }
         btnRun.disabled = false;
     };
 
