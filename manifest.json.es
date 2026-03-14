@@ -1,9 +1,0 @@
-{
-  "name": "VoiceTranscribe",
-  "short_name": "Transcribe",
-  "start_url": "index.html",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#007bff",
-  "icons": [{ "src": "icon.png", "sizes": "512x512", "type": "image/png" }]
-}
